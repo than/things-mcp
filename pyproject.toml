@@ -5,10 +5,23 @@ description = "Things 3 MCP server: read via things.py, write via the URL scheme
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [{ name = "than" }]
+keywords = ["things", "things3", "mcp", "model-context-protocol", "gtd", "todo"]
+classifiers = [
+    "Environment :: MacOS X",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Topic :: Office/Business :: Scheduling",
+]
 dependencies = [
     "mcp>=1.28,<2",
     "things.py>=1.0.1,<2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/than/things-mcp"
+Issues = "https://github.com/than/things-mcp/issues"
 
 [project.scripts]
 things-mcp = "things_mcp.server:main"

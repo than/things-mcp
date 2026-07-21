@@ -1,5 +1,134 @@
 # things-mcp
 
-A Things 3 MCP server for macOS. Reads your Things data (read-only SQLite via [`things.py`](https://github.com/thingsapi/things.py)) and writes via the official `things:///` URL scheme.
+A [Model Context Protocol](https://modelcontextprotocol.io) server for [Things 3](https://culturedcode.com/things/) on macOS. It lets Claude (Claude Code **and** Claude Desktop) read and write your tasks.
 
-> Full setup and install docs land in Task 9. This is a stub so the package builds.
+**How it works — the reliable combination:**
+
+| Operation | Mechanism | Why |
+|-----------|-----------|-----|
+| **Reads** (todos, projects, areas, tags, search) | Read-only SQLite via [`things.py`](https://github.com/thingsapi/things.py) | Fast, complete, works on large libraries. Read-only **cannot corrupt** the database. |
+| **Writes** (create / update / complete) | Official `things:///` URL scheme | Cultured Code's sanctioned write path. Never touches the DB directly. |
+
+This split is deliberate: Things' own guidance warns that *writing* to its database can cause data loss, so this server **never** does. Reads open the DB read-only; every mutation goes through the URL scheme.
+
+## Requirements
+
+- **macOS** (Things is Mac/iOS only; this server must run on the same Mac as Things).
+- **Things 3**, opened at least once so its database exists.
+- **Python ≥ 3.11** and [`uv`](https://docs.astral.sh/uv/).
+
+## Setup — do this first (it's the #1 reason task servers "don't work")
+
+### 1. Grant Full Disk Access (required for reads)
+
+The Things database lives in a macOS-protected container. Without **Full Disk Access**, macOS blocks all reads with `Operation not permitted` — and naive servers silently report "no tasks found" instead of explaining why.
+
+Grant it to **the app that launches this server**:
+
+- **Claude Code** → your terminal app (Terminal, iTerm2, etc.).
+- **Claude Desktop** → `Claude.app`.
+
+**System Settings → Privacy & Security → Full Disk Access →** enable that app, then **fully quit and reopen it**.
+
+### 2. Enable Things URLs (required for writes)
+
+**Things → Settings → General → Enable Things URLs.** This lets the server create and update items, and provides the auth token (read automatically — you never paste it).
+
+## Install
+
+Clone this repo, then point your client at it. Replace `/ABSOLUTE/PATH/things-mcp` with the real path.
+
+### Claude Code
+
+```bash
+claude mcp add things -- uv run --directory /ABSOLUTE/PATH/things-mcp things-mcp
+```
+
+### Claude Desktop
+
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "things": {
+      "command": "uv",
+      "args": ["run", "--directory", "/ABSOLUTE/PATH/things-mcp", "things-mcp"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop after editing.
+
+## Verify
+
+Ask Claude to **run the `doctor` tool**. All three checks should pass:
+
+- `database_found` — the Things DB was located.
+- `database_readable` — Full Disk Access is granted (no TCC block).
+- `things_urls_enabled` — the auth token is available.
+
+Any failure comes with the exact fix.
+
+## Tools
+
+### Reads
+| Tool | Description |
+|------|-------------|
+| `list_inbox` | To-dos in the Inbox |
+| `list_today` | To-dos scheduled for Today (plus overdue) |
+| `list_upcoming` | Scheduled future to-dos |
+| `list_anytime` | To-dos in Anytime |
+| `list_someday` | To-dos in Someday |
+| `list_logbook` | Completed / canceled to-dos |
+| `list_todos` | To-dos filtered by project / area / tag / status / deadline |
+| `list_projects` | Projects (optionally by area) |
+| `list_areas` | All areas |
+| `list_tags` | All tag titles |
+| `search` | Search to-dos/projects by title and notes |
+| `get_item` | Fetch one item by uuid (with checklist items) |
+| `list_recent` | Items created within an offset like `3d`, `1w`, `1y` |
+
+### Writes
+| Tool | Description |
+|------|-------------|
+| `add_todo` | Create a to-do (title, notes, when, deadline, tags, checklist, list, heading) |
+| `add_project` | Create a project, optionally pre-filled with to-dos |
+| `update_todo` | Update a to-do by id |
+| `update_project` | Update a project by id |
+| `complete_todo` | Mark a to-do complete |
+| `cancel_todo` | Mark a to-do canceled |
+
+### Diagnostics
+| Tool | Description |
+|------|-------------|
+| `doctor` | Preflight: DB found? readable (Full Disk Access)? Things URLs enabled? |
+
+## Known limitations (v1)
+
+- **Creating areas or tags isn't supported** — the URL scheme can't create them (only AppleScript can). Areas and tags are read-only; you can *apply* existing tags when adding/updating.
+- **Write confirmation is best-effort.** The URL scheme doesn't return the new item's ID, so after an `add` the server reads the list back and tries to match by title. If it can't confirm, it says so rather than inventing an ID.
+- **macOS only**, by nature.
+
+## Development
+
+```bash
+uv sync
+uv run pytest          # full suite runs against a vendored fixture DB — no live Things needed
+```
+
+Read tests run against a Things-schema fixture database vendored from `things.py` (see `tests/fixtures/README.md`).
+
+## Credits
+
+- Reading is powered by [`things.py`](https://github.com/thingsapi/things.py) (MIT).
+- Built against Cultured Code's official docs:
+  [URL scheme](https://culturedcode.com/things/support/articles/2803573/),
+  [JSON command](https://culturedcode.com/things/support/articles/4562654/),
+  [AppleScript](https://culturedcode.com/things/support/articles/2803572/),
+  [AI tools & safe integration](https://culturedcode.com/things/support/articles/5510170/).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
