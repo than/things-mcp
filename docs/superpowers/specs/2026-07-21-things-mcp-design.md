@@ -65,7 +65,7 @@ A single Python MCP server built on **FastMCP**, importing the mature **`things.
 Each unit has one purpose, a defined interface, and is independently testable.
 
 | Unit | Responsibility | Interface | Depends on |
-|------|----------------|-----------|------------|
+| --- | --- | --- | --- |
 | `db.py` | Locate the Things SQLite DB; expose a validated filepath; clear errors if missing | `find_database() -> Path` | filesystem glob |
 | `reads.py` | Thin typed wrappers over `things.py` query functions; normalize output | `list_inbox()`, `list_todos(...)`, `search(q)`, `get_item(uuid)`, … | `things.py`, `db.py` |
 | `urlscheme.py` | **Pure** function: build a `things:///` URL string from structured args | `build_url(command, **params) -> str` | none (pure) |
@@ -82,13 +82,26 @@ The DB lives in the app sandbox container; the exact subfolder/filename **change
 ```
 
 `things.py` already implements this discovery (env var `THINGSDB` overrides). `db.py` wraps it and raises a precise error distinguishing:
+
 - Things not installed / never launched,
 - Things installed but never synced (no DB yet),
 - DB found but unreadable (permissions).
 
+## macOS permissions (TCC / Full Disk Access) — the likely reason prior repos failed
+
+The Things DB lives under `~/Library/Group Containers/…`, which macOS protects via TCC. A process without **Full Disk Access** gets `Operation not permitted` (errno 1 / `PermissionError`) even trying to *list* the folder — confirmed on this machine during design. Symptoms in naive MCP servers: empty results or an opaque crash, with no explanation. This is a prime suspect for why the user's two prior repos "didn't work."
+
+The host app that must be granted Full Disk Access is **the process that launches the MCP server**:
+
+- Claude Code → the terminal app (Terminal.app / iTerm / etc.), or the Claude Code binary if launched directly.
+- Claude Desktop → `Claude.app`.
+
+`db.py` MUST distinguish `PermissionError` from "not found" and return remediation naming the exact panel: **System Settings → Privacy & Security → Full Disk Access → enable your terminal / Claude**. A `doctor` / preflight check surfaces this at startup rather than on first query.
+
 ## Tools exposed
 
 ### Reads (via things.py)
+
 - `list_inbox`, `list_today`, `list_upcoming`, `list_anytime`, `list_someday`, `list_logbook`
 - `list_todos` — filters: `project`, `area`, `tag`, `status` (incomplete/completed/canceled), `deadline`
 - `list_projects`, `list_areas`, `list_tags`
@@ -97,11 +110,16 @@ The DB lives in the app sandbox container; the exact subfolder/filename **change
 - `list_recent` — items created within an offset like `3d` / `1w` / `1y`
 
 ### Writes (via URL scheme)
+
 - `add_todo` — title, notes, when, deadline, tags, checklist_items, list, heading
 - `add_project` — title, notes, when, deadline, tags, area, todos
 - `update_todo` — id + any mutable field (auto auth-token)
 - `update_project` — id + any mutable field (auto auth-token)
 - `complete_todo`, `cancel_todo` — id
+
+### Diagnostics
+
+- `doctor` — preflight: DB found? readable (TCC)? Things URLs enabled / token present? Returns a checklist with exact remediation for any failure.
 
 ## Auth token handling
 
@@ -110,6 +128,7 @@ Update commands require an `auth-token`. `things.py` exposes `things.token()` wh
 ## Write confirmation (v1 decision)
 
 `open` fires the URL but does not cleanly return the created item's ID. v1 approach:
+
 1. Execute the write.
 2. Best-effort **read-back**: for `add`, query the target list for a newly-created item matching the title; return it if found.
 3. Report the outcome honestly — if the read-back can't confirm, say so rather than fabricating an ID.
@@ -119,6 +138,7 @@ Deferred: proper x-callback-url ID capture, or AppleScript `make new to do` (ret
 ## Error handling
 
 - **DB missing/unreadable:** precise, actionable error at tool-call time (and at server start).
+- **TCC / Full Disk Access denied (`PermissionError`):** distinct from "not found"; name the exact System Settings panel and the host app to enable.
 - **Writes when URLs disabled / no token:** actionable message naming the exact Settings toggle.
 - **Invalid args (bad date, unknown list):** validated before building the URL; return the specific problem.
 - **`open` failure:** surface the subprocess error; never claim success on failure.
@@ -136,7 +156,9 @@ Deferred: proper x-callback-url ID capture, or AppleScript `make new to do` (ret
 - README includes:
   - the exact `claude mcp add` command (Claude Code),
   - the Claude Desktop `claude_desktop_config.json` snippet,
-  - the "Enable Things URLs" one-time setup step.
+  - the **Full Disk Access** one-time grant (host terminal app / Claude.app) — called out first, since it's the top failure mode,
+  - the "Enable Things URLs" one-time setup step,
+  - a "run `doctor` first" instruction to validate the install.
 
 ## Open questions / risks
 
