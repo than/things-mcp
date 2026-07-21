@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from urllib.parse import quote
 
 _COMMA_KEYS = {"tags", "add-tags", "filter"}
 _NEWLINE_KEYS = {"checklist-items", "titles", "to-dos"}
+
+_AUTH_TOKEN_RE = re.compile(r"(auth-token=)[^&\s]*")
+
+
+def redact_auth_token(text: str) -> str:
+    """Replace any ``auth-token=...`` value with a redaction marker.
+
+    The Things auth token is a persistent write credential for the user's task
+    database. It must never be returned to the model or echoed into error
+    messages/transcripts, so any string that may contain it is scrubbed first.
+    """
+    return _AUTH_TOKEN_RE.sub(r"\1<redacted>", text)
 
 
 def _encode_value(key: str, value: Any) -> str:

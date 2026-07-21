@@ -42,3 +42,22 @@ def test_run_url_missing_open_raises_runner_error(monkeypatch):
     monkeypatch.setattr(runner.subprocess, "run", fake_run)
     with pytest.raises(runner.RunnerError):
         runner.run_url("things:///add?title=x")
+
+
+def test_run_url_error_redacts_auth_token(monkeypatch):
+    def fake_run(cmd, **kwargs):
+        class R:
+            returncode = 1
+            stderr = (
+                b"No application knows how to open URL "
+                b"things:///update?auth-token=SECRET123&id=x"
+            )
+
+        return R()
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    with pytest.raises(runner.RunnerError) as exc:
+        runner.run_url("things:///update?auth-token=SECRET123&id=x")
+    msg = str(exc.value)
+    assert "SECRET123" not in msg
+    assert "auth-token=<redacted>" in msg

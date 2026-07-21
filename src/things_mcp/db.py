@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import pathlib
-from typing import Iterator
 
 THINGSDB_ENV = "THINGSDB"
 
@@ -42,19 +41,22 @@ class ThingsDBPermissionError(ThingsError):
     """macOS TCC denied access to the Things database."""
 
 
-def _iter_candidate_dbs() -> Iterator[pathlib.Path]:
-    """Yield main.sqlite candidates under the group container.
+def _scan_candidates() -> tuple[list[pathlib.Path], bool]:
+    """Return ``(candidates, permission_denied)`` under the group container.
 
     Implemented as a manual scandir walk rather than ``Path.glob`` because
     ``glob`` silently swallows ``PermissionError`` (returning no matches),
     which would misreport a TCC/Full-Disk-Access denial as "database not
-    found". A raised ``PermissionError`` here propagates to the caller so it
-    can be surfaced as :class:`ThingsDBPermissionError`.
+    found".
+
+    A ``PermissionError`` on any directory sets ``permission_denied=True`` but
+    does NOT abort the walk: if a readable database exists elsewhere we want to
+    use it (a single unreadable sibling should not force a misleading Full Disk
+    Access message). ``follow_symlinks=False`` avoids symlink recursion loops.
     """
-    try:
-        stack = [GROUP_CONTAINER]
-    except OSError:  # pragma: no cover - defensive
-        return
+    candidates: list[pathlib.Path] = []
+    permission_denied = False
+    stack = [GROUP_CONTAINER]
     while stack:
         directory = stack.pop()
         try:
@@ -62,12 +64,32 @@ def _iter_candidate_dbs() -> Iterator[pathlib.Path]:
         except FileNotFoundError:
             # Directory vanished or the container doesn't exist yet.
             continue
-        # PermissionError intentionally NOT caught here: let it propagate.
+        except PermissionError:
+            # TCC or POSIX denial on this directory; remember it and move on.
+            permission_denied = True
+            continue
         for entry in entries:
             if entry.is_dir(follow_symlinks=False):
                 stack.append(pathlib.Path(entry.path))
             elif entry.name == "main.sqlite":
-                yield pathlib.Path(entry.path)
+                candidates.append(pathlib.Path(entry.path))
+    return candidates, permission_denied
+
+
+def _rank_candidate(path: pathlib.Path) -> tuple[bool, float]:
+    """Sort key (higher is better): current ``ThingsData-*`` layout, then mtime.
+
+    Things >= 3.15.16 stores the live DB under ``ThingsData-XXXX/...``; older
+    versions used a flat ``Things Database.thingsdatabase/...`` path. When both
+    linger, the ``ThingsData-*`` one is authoritative — mirroring things.py's
+    own resolver. Among equals, the most recently modified wins.
+    """
+    is_thingsdata = any(part.startswith("ThingsData-") for part in path.parts)
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    return (is_thingsdata, mtime)
 
 
 def _readable(path: pathlib.Path) -> bool:
@@ -98,16 +120,20 @@ def find_database() -> pathlib.Path:
             f"{THINGSDB_ENV} is set to '{path}' but no readable database is there."
         )
 
-    try:
-        candidates = sorted(_iter_candidate_dbs(), key=lambda p: len(p.parts))
-    except PermissionError as exc:
-        raise ThingsDBPermissionError(_FDA_HINT) from exc
+    candidates, permission_denied = _scan_candidates()
+    # Best (current-layout, newest) first.
+    candidates.sort(key=_rank_candidate, reverse=True)
 
     for path in candidates:
         try:
             if _readable(path):
                 return path
-        except PermissionError as exc:
-            raise ThingsDBPermissionError(_FDA_HINT) from exc
+        except PermissionError:
+            permission_denied = True
+            continue
 
+    # No readable database. Distinguish a TCC/permission wall from a genuine
+    # absence so the user gets the right remediation.
+    if permission_denied:
+        raise ThingsDBPermissionError(_FDA_HINT)
     raise ThingsDBNotFoundError(_NOT_FOUND_HINT)

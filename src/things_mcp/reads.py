@@ -45,14 +45,19 @@ def list_todos(
     deadline: str | None = None,
     filepath: str | None = None,
 ) -> list[dict[str, Any]]:
-    return things.todos(
-        project=project,
-        area=area,
-        tag=tag,
-        status=status,
-        deadline=deadline,
-        filepath=_fp(filepath),
-    )
+    # Only forward ``status`` when explicitly given. Passing ``status=None``
+    # would override things.py's native "incomplete only" default and return
+    # completed and canceled to-dos mixed in — not what "list my to-dos" means.
+    kwargs: dict[str, Any] = {
+        "project": project,
+        "area": area,
+        "tag": tag,
+        "deadline": deadline,
+        "filepath": _fp(filepath),
+    }
+    if status is not None:
+        kwargs["status"] = status
+    return things.todos(**kwargs)
 
 
 def list_projects(

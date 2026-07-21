@@ -19,6 +19,24 @@ def test_list_todos_returns_todo_items(fixture_db):
     assert all(t.get("type") == "to-do" for t in todos)
 
 
+def test_list_todos_defaults_to_incomplete_only(fixture_db):
+    import things
+
+    got = reads.list_todos(filepath=fixture_db)
+    incomplete = things.todos(status="incomplete", filepath=fixture_db)
+    everything = things.todos(status=None, filepath=fixture_db)
+    # Default must match incomplete-only, NOT all statuses.
+    assert len(got) == len(incomplete)
+    assert len(got) < len(everything)
+    assert all(t.get("status") == "incomplete" for t in got)
+
+
+def test_list_todos_explicit_status_filter_works(fixture_db):
+    completed = reads.list_todos(status="completed", filepath=fixture_db)
+    assert completed, "fixture should contain completed todos"
+    assert all(t.get("status") == "completed" for t in completed)
+
+
 def test_search_finds_by_title(fixture_db):
     todos = reads.list_todos(filepath=fixture_db)
     assert todos, "fixture should contain todos"

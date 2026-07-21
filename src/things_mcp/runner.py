@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import subprocess
 
+from things_mcp.urlscheme import redact_auth_token
+
 
 class RunnerError(Exception):
     """Executing the URL via `open` failed."""
@@ -23,4 +25,7 @@ def run_url(url: str) -> None:
         detail = getattr(result, "stderr", b"") or b""
         if isinstance(detail, bytes):
             detail = detail.decode(errors="replace")
-        raise RunnerError(f"`open` failed (exit {result.returncode}): {detail.strip()}")
+        # macOS `open` echoes the full URL (which may carry auth-token=...) into
+        # stderr on failure; scrub it before it reaches the model/transcript.
+        detail = redact_auth_token(detail.strip())
+        raise RunnerError(f"`open` failed (exit {result.returncode}): {detail}")

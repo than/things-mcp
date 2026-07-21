@@ -30,3 +30,15 @@ def test_read_tool_errors_are_caught(monkeypatch):
     monkeypatch.setattr(reads, "list_inbox", boom)
     out = server.list_inbox()
     assert isinstance(out, dict) and "error" in out
+
+
+def test_invalid_status_returns_friendly_error(monkeypatch, fixture_db):
+    monkeypatch.setattr(db, "find_database", lambda: pathlib.Path(fixture_db))
+    out = server.list_todos(status="not-a-real-status")
+    assert isinstance(out, dict) and "error" in out
+
+
+def test_invalid_offset_returns_friendly_error(monkeypatch, fixture_db):
+    monkeypatch.setattr(db, "find_database", lambda: pathlib.Path(fixture_db))
+    out = server.list_recent("7")  # missing unit like '7d'
+    assert isinstance(out, dict) and "error" in out

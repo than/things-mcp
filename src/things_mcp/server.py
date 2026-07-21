@@ -17,7 +17,10 @@ def _safe(fn: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return fn(*args, **kwargs)
-        except (db.ThingsError, runner.RunnerError) as exc:
+        except (db.ThingsError, runner.RunnerError, ValueError) as exc:
+            # ValueError covers things.py's argument validation (unknown status,
+            # bad offset/deadline) so those surface as a friendly error dict
+            # instead of an opaque tool exception.
             return {"error": str(exc)}
 
     return wrapper

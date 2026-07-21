@@ -52,3 +52,16 @@ def test_add_project_todos_newline_joined():
     url = u.add_project_url(title="P", todos=["t1", "t2"])
     q = parse_qs(urlparse(url).query)
     assert q["to-dos"] == ["t1\nt2"]
+
+
+def test_redact_auth_token():
+    url = "things:///update?id=x&auth-token=SECRET123&title=hi"
+    red = u.redact_auth_token(url)
+    assert "SECRET123" not in red
+    assert "auth-token=<redacted>" in red
+    # non-token text is untouched
+    assert "id=x" in red and "title=hi" in red
+
+
+def test_redact_auth_token_noop_when_absent():
+    assert u.redact_auth_token("things:///add?title=hi") == "things:///add?title=hi"
