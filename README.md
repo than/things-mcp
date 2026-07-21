@@ -36,13 +36,15 @@ Grant it to **the app that launches this server**:
 
 ## Install
 
-Clone this repo, then point your client at it. Replace `/ABSOLUTE/PATH/things-mcp` with the real path.
+No clone required — [`uv`](https://docs.astral.sh/uv/) builds and runs it straight from GitHub.
 
 ### Claude Code
 
 ```bash
-claude mcp add things -- uv run --directory /ABSOLUTE/PATH/things-mcp things-mcp
+claude mcp add -s user things -- uvx --from git+https://github.com/than/things-mcp things-mcp
 ```
+
+(`-s user` makes it available in every project. Drop it to scope the server to the current project only.)
 
 ### Claude Desktop
 
@@ -52,14 +54,22 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "things": {
-      "command": "uv",
-      "args": ["run", "--directory", "/ABSOLUTE/PATH/things-mcp", "things-mcp"]
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/than/things-mcp", "things-mcp"]
     }
   }
 }
 ```
 
 Restart Claude Desktop after editing.
+
+### Local checkout (development)
+
+If you've cloned the repo and want to run your working copy:
+
+```bash
+claude mcp add -s user things -- uv run --directory /ABSOLUTE/PATH/things-mcp things-mcp
+```
 
 ## Verify
 
