@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Callable
 
 import things
 
-from things_mcp import db, reads, runner, urlscheme
+from things_mcp import db, runner, urlscheme
+from things_mcp import read_backend as reads
 
 _TOKEN_CACHE: dict[str, str] = {}
+
+_AUTH_TOKEN_ENV = "THINGS_AUTH_TOKEN"
 
 # Things handles the URL asynchronously, so a newly created item may not appear
 # in a read the instant `open` returns. Poll a few times before giving up.
@@ -18,7 +22,9 @@ _READBACK_DELAY = 0.25
 
 _URLS_DISABLED_HINT = (
     "Could not read the Things auth token. Enable it in Things: "
-    "Settings → General → Enable Things URLs → Manage, then try again."
+    "Settings → General → Enable Things URLs → Manage. If you are not using "
+    f"Full Disk Access, copy that token and set the {_AUTH_TOKEN_ENV} "
+    "environment variable in your MCP server config."
 )
 
 
@@ -28,6 +34,12 @@ class ThingsAuthError(db.ThingsError):
 
 def get_token() -> str:
     if "token" in _TOKEN_CACHE:
+        return _TOKEN_CACHE["token"]
+    # Prefer an explicitly configured token (works with the AppleScript backend,
+    # no Full Disk Access needed). Otherwise read it from the database.
+    env_tok = os.environ.get(_AUTH_TOKEN_ENV)
+    if env_tok:
+        _TOKEN_CACHE["token"] = env_tok.strip()
         return _TOKEN_CACHE["token"]
     tok = things.token(filepath=str(db.find_database()))
     if not tok:

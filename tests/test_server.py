@@ -1,7 +1,8 @@
 import asyncio
 import pathlib
 
-from things_mcp import server, db, reads
+from things_mcp import server, db
+from things_mcp import read_backend as reads
 
 
 def test_tools_registered():

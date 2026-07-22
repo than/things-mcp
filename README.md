@@ -11,6 +11,25 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for [Things 3
 
 This split is deliberate: Things' own guidance warns that *writing* to its database can cause data loss, so this server **never** does. Reads open the DB read-only; every mutation goes through the URL scheme.
 
+## Read backends: SQLite vs AppleScript
+
+Reads have two backends. By default the server **auto-selects**: SQLite if it can reach the database (Full Disk Access granted), otherwise AppleScript.
+
+| | **SQLite** (default when FDA granted) | **AppleScript** (fallback) |
+|---|---|---|
+| Full Disk Access | **Required** | Not needed (uses Automation permission, auto-prompted) |
+| Things must be running | No | Yes |
+| Speed | Instant | Fast for most views; a few seconds for large all-todo lists |
+| Field coverage | Complete | Core fields (no checklist items, no per-item project/area) |
+
+**Why this matters for Claude Desktop:** granting Full Disk Access to `Claude.app` does not always propagate to the process it spawns, so SQLite can stay blocked. The AppleScript backend sidesteps that entirely — set `THINGS_MCP_BACKEND=applescript` (below) and you only need the one-click Automation prompt.
+
+### Configuration (env vars)
+
+- `THINGS_MCP_BACKEND` — `auto` (default) · `sqlite` · `applescript`.
+- `THINGS_AUTH_TOKEN` — the Things URL token for updates/complete/cancel. Only needed on the AppleScript backend (where the token can't be read from the DB). Copy it from **Things → Settings → General → Enable Things URLs → Manage**.
+- `THINGSDB` — override the database path (rarely needed; it's auto-discovered).
+
 ## Requirements
 
 - **macOS** (Things is Mac/iOS only; this server must run on the same Mac as Things).
@@ -62,6 +81,23 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```
 
 Restart Claude Desktop after editing.
+
+**Avoiding the Full Disk Access dance on Desktop:** if `doctor` reports the database blocked (TCC), add the AppleScript backend instead — no Full Disk Access required:
+
+```json
+{
+  "mcpServers": {
+    "things": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/than/things-mcp", "things-mcp"],
+      "env": {
+        "THINGS_MCP_BACKEND": "applescript",
+        "THINGS_AUTH_TOKEN": "your-things-url-token"
+      }
+    }
+  }
+}
+```
 
 ### Local checkout (development)
 

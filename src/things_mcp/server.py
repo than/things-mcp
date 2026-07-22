@@ -7,7 +7,8 @@ from typing import Any, Callable
 
 from mcp.server.fastmcp import FastMCP
 
-from things_mcp import db, doctor, reads, runner, writes
+from things_mcp import db, doctor, runner, writes
+from things_mcp import read_backend as reads
 
 mcp = FastMCP("things")
 
