@@ -67,37 +67,30 @@ claude mcp add -s user things -- uvx --from git+https://github.com/than/things-m
 
 ### Claude Desktop
 
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Recommended: the **AppleScript backend** — no Full Disk Access needed, just one Automation click. (On Desktop, Full Disk Access granted to `Claude.app` often does not reach the process it spawns, so SQLite can stay blocked.)
 
-```json
-{
-  "mcpServers": {
-    "things": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/than/things-mcp", "things-mcp"]
-    }
-  }
-}
-```
+1. **Copy your token:** Things → Settings → General → Enable Things URLs → **Manage** → copy the token.
+2. **Edit** `~/Library/Application Support/Claude/claude_desktop_config.json` and add the `things` server (paste your token):
 
-Restart Claude Desktop after editing.
+   ```json
+   {
+     "mcpServers": {
+       "things": {
+         "command": "uvx",
+         "args": ["--from", "git+https://github.com/than/things-mcp", "things-mcp"],
+         "env": {
+           "THINGS_MCP_BACKEND": "applescript",
+           "THINGS_AUTH_TOKEN": "paste-token-here"
+         }
+       }
+     }
+   }
+   ```
 
-**Avoiding the Full Disk Access dance on Desktop:** if `doctor` reports the database blocked (TCC), add the AppleScript backend instead — no Full Disk Access required:
+3. **Quit Claude Desktop (⌘Q) and reopen.**
+4. Ask it "show my Things today" → click **Allow** on the *"uvx wants to control Things"* prompt.
 
-```json
-{
-  "mcpServers": {
-    "things": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/than/things-mcp", "things-mcp"],
-      "env": {
-        "THINGS_MCP_BACKEND": "applescript",
-        "THINGS_AUTH_TOKEN": "your-things-url-token"
-      }
-    }
-  }
-}
-```
+Prefer fast SQLite instead? Drop the `env` block, grant **Full Disk Access** to `Claude.app` (and, if reads still fail, to the `uvx`/interpreter binary), then relaunch.
 
 ### Local checkout (development)
 
