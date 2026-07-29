@@ -6,11 +6,39 @@ import functools
 from typing import Any, Callable
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from things_mcp import db, doctor, runner, writes
 from things_mcp import read_backend as reads
 
-mcp = FastMCP("things")
+INSTRUCTIONS = """\
+Read and write the user's Things 3 task database on this Mac.
+
+Reads come from the local Things database (via AppleScript, or direct SQLite when
+Full Disk Access is granted) and return JSON. Writes go through the Things URL
+scheme, so Things must be running and "Enable Things URLs" must be on
+(Things > Settings > General).
+
+Conventions:
+- Items are identified by `uuid` (reads) / `id` (writes) — the same value.
+- `when` accepts today, tomorrow, evening, anytime, someday, or yyyy-mm-dd.
+- `deadline` is yyyy-mm-dd.
+- Run `doctor` first if any tool reports a permissions or URL-scheme error.
+"""
+
+READ_ONLY = ToolAnnotations(readOnlyHint=True, openWorldHint=False)
+CREATE = ToolAnnotations(
+    readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
+)
+MODIFY = ToolAnnotations(
+    readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False
+)
+
+mcp = FastMCP(
+    "things",
+    instructions=INSTRUCTIONS,
+    website_url="https://github.com/than/things-mcp",
+)
 
 
 def _safe(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -28,49 +56,55 @@ def _safe(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 
 # ---- Reads ----
-@mcp.tool()
+@mcp.tool(title="List Inbox", annotations=READ_ONLY)
 @_safe
 def list_inbox() -> Any:
-    """To-dos in the Inbox."""
+    """List every to-do sitting in the Things Inbox — items captured but not yet
+    filed into a project or area. Returns uuid, title, notes, tags, and dates."""
     return reads.list_inbox()
 
 
-@mcp.tool()
+@mcp.tool(title="List Today", annotations=READ_ONLY)
 @_safe
 def list_today() -> Any:
-    """To-dos scheduled for Today (plus overdue)."""
+    """List the to-dos on the Today list, including anything overdue that Things
+    has rolled forward. This is the answer to "what am I working on today?"."""
     return reads.list_today()
 
 
-@mcp.tool()
+@mcp.tool(title="List Upcoming", annotations=READ_ONLY)
 @_safe
 def list_upcoming() -> Any:
-    """Scheduled future to-dos (Upcoming)."""
+    """List to-dos scheduled for a future date (the Upcoming list), including
+    repeating items' next occurrences."""
     return reads.list_upcoming()
 
 
-@mcp.tool()
+@mcp.tool(title="List Anytime", annotations=READ_ONLY)
 @_safe
 def list_anytime() -> Any:
-    """To-dos in Anytime."""
+    """List to-dos in Anytime — active work with no scheduled date, i.e. the pool
+    of things that could be pulled into Today."""
     return reads.list_anytime()
 
 
-@mcp.tool()
+@mcp.tool(title="List Someday", annotations=READ_ONLY)
 @_safe
 def list_someday() -> Any:
-    """To-dos in Someday."""
+    """List to-dos parked in Someday — deferred ideas the user is not committed
+    to yet."""
     return reads.list_someday()
 
 
-@mcp.tool()
+@mcp.tool(title="List Logbook", annotations=READ_ONLY)
 @_safe
 def list_logbook() -> Any:
-    """Completed/canceled to-dos (Logbook)."""
+    """List completed and canceled to-dos from the Logbook, newest first. Use
+    this to report on what was finished over a period."""
     return reads.list_logbook()
 
 
-@mcp.tool()
+@mcp.tool(title="List To-dos (filtered)", annotations=READ_ONLY)
 @_safe
 def list_todos(
     project: str | None = None,
@@ -79,56 +113,84 @@ def list_todos(
     status: str | None = None,
     deadline: str | None = None,
 ) -> Any:
-    """To-dos filtered by project/area/tag/status/deadline (all optional)."""
+    """Query to-dos with any combination of filters. All arguments are optional;
+    with none, returns all incomplete to-dos.
+
+    Args:
+        project: project uuid to restrict results to.
+        area: area uuid to restrict results to.
+        tag: tag title, e.g. "errand".
+        status: "incomplete", "completed", or "canceled".
+        deadline: yyyy-mm-dd; returns items due on or before that date.
+    """
     return reads.list_todos(
         project=project, area=area, tag=tag, status=status, deadline=deadline
     )
 
 
-@mcp.tool()
+@mcp.tool(title="List Projects", annotations=READ_ONLY)
 @_safe
 def list_projects(area: str | None = None) -> Any:
-    """Projects, optionally filtered by area uuid."""
+    """List all projects, optionally only those inside one area.
+
+    Args:
+        area: area uuid from list_areas.
+    """
     return reads.list_projects(area=area)
 
 
-@mcp.tool()
+@mcp.tool(title="List Areas", annotations=READ_ONLY)
 @_safe
 def list_areas() -> Any:
-    """All areas."""
+    """List all areas of responsibility (Work, Home, ...) with their uuids —
+    the uuids other tools take as an `area` argument."""
     return reads.list_areas()
 
 
-@mcp.tool()
+@mcp.tool(title="List Tags", annotations=READ_ONLY)
 @_safe
 def list_tags() -> Any:
-    """All tag titles."""
+    """List every tag title defined in Things. Use before tagging so new items
+    reuse existing tags instead of creating near-duplicates."""
     return reads.list_tags()
 
 
-@mcp.tool()
+@mcp.tool(title="Search Things", annotations=READ_ONLY)
 @_safe
 def search(query: str) -> Any:
-    """Search to-dos/projects by title and notes."""
+    """Full-text search across to-do and project titles and notes.
+
+    Args:
+        query: substring to match, case-insensitive.
+    """
     return reads.search(query)
 
 
-@mcp.tool()
+@mcp.tool(title="Get Item", annotations=READ_ONLY)
 @_safe
 def get_item(uuid: str) -> Any:
-    """Fetch a single to-do/project/area by uuid (with checklist items)."""
+    """Fetch one to-do, project, or area by uuid, including its checklist items
+    and full notes — more detail than the list tools return.
+
+    Args:
+        uuid: id returned by any list or search tool.
+    """
     return reads.get_item(uuid)
 
 
-@mcp.tool()
+@mcp.tool(title="List Recently Created", annotations=READ_ONLY)
 @_safe
 def list_recent(offset: str) -> Any:
-    """Items created within an offset like '3d', '1w', '1y'."""
+    """List items created within a recent time window.
+
+    Args:
+        offset: window like "3d", "1w", "6m", "1y".
+    """
     return reads.list_recent(offset)
 
 
 # ---- Writes ----
-@mcp.tool()
+@mcp.tool(title="Add To-do", annotations=CREATE)
 @_safe
 def add_todo(
     title: str,
@@ -140,7 +202,19 @@ def add_todo(
     list: str | None = None,
     heading: str | None = None,
 ) -> Any:
-    """Create a to-do. `when`: today/tomorrow/evening/anytime/someday/yyyy-mm-dd."""
+    """Create a new to-do in Things. Requires Things to be running with URLs
+    enabled (run `doctor` if this fails).
+
+    Args:
+        title: the to-do's name. Required.
+        notes: body text for the to-do.
+        when: today, tomorrow, evening, anytime, someday, or yyyy-mm-dd.
+        deadline: hard due date, yyyy-mm-dd.
+        tags: tag titles to apply; unknown tags are ignored by Things.
+        checklist_items: sub-steps to add inside the to-do.
+        list: destination project or area, by title or uuid. Omit for Inbox.
+        heading: heading within the destination project to file under.
+    """
     return writes.add_todo(
         title,
         notes=notes,
@@ -153,7 +227,7 @@ def add_todo(
     )
 
 
-@mcp.tool()
+@mcp.tool(title="Add Project", annotations=CREATE)
 @_safe
 def add_project(
     title: str,
@@ -164,7 +238,17 @@ def add_project(
     area: str | None = None,
     todos: list[str] | None = None,
 ) -> Any:
-    """Create a project, optionally pre-filled with to-dos."""
+    """Create a new project, optionally pre-filled with to-dos.
+
+    Args:
+        title: the project's name. Required.
+        notes: body text for the project.
+        when: today, tomorrow, evening, anytime, someday, or yyyy-mm-dd.
+        deadline: hard due date, yyyy-mm-dd.
+        tags: tag titles to apply.
+        area: destination area, by title or uuid.
+        todos: titles of to-dos to create inside the new project, in order.
+    """
     return writes.add_project(
         title,
         notes=notes,
@@ -176,7 +260,7 @@ def add_project(
     )
 
 
-@mcp.tool()
+@mcp.tool(title="Update To-do", annotations=MODIFY)
 @_safe
 def update_todo(
     id: str,
@@ -189,7 +273,20 @@ def update_todo(
     completed: bool | None = None,
     canceled: bool | None = None,
 ) -> Any:
-    """Update an existing to-do by id (requires Things URLs enabled)."""
+    """Change fields on an existing to-do. Only the arguments you pass are
+    modified; everything else is left alone.
+
+    Args:
+        id: uuid of the to-do. Required.
+        title: new name.
+        notes: replaces the existing notes.
+        when: today, tomorrow, evening, anytime, someday, or yyyy-mm-dd.
+        deadline: hard due date, yyyy-mm-dd.
+        tags: replaces all tags with this list.
+        add_tags: appends these tags, keeping existing ones.
+        completed: true marks it done.
+        canceled: true marks it canceled.
+    """
     fields = {
         "title": title,
         "notes": notes,
@@ -204,7 +301,7 @@ def update_todo(
     return writes.update_todo(id, **fields)
 
 
-@mcp.tool()
+@mcp.tool(title="Update Project", annotations=MODIFY)
 @_safe
 def update_project(
     id: str,
@@ -216,7 +313,19 @@ def update_project(
     completed: bool | None = None,
     canceled: bool | None = None,
 ) -> Any:
-    """Update an existing project by id (requires Things URLs enabled)."""
+    """Change fields on an existing project. Only the arguments you pass are
+    modified; everything else is left alone.
+
+    Args:
+        id: uuid of the project. Required.
+        title: new name.
+        notes: replaces the existing notes.
+        when: today, tomorrow, evening, anytime, someday, or yyyy-mm-dd.
+        deadline: hard due date, yyyy-mm-dd.
+        tags: replaces all tags with this list.
+        completed: true marks the project done.
+        canceled: true marks the project canceled.
+    """
     fields = {
         "title": title,
         "notes": notes,
@@ -230,25 +339,36 @@ def update_project(
     return writes.update_project(id, **fields)
 
 
-@mcp.tool()
+@mcp.tool(title="Complete To-do", annotations=MODIFY)
 @_safe
 def complete_todo(id: str) -> Any:
-    """Mark a to-do complete."""
+    """Mark a to-do as done; it moves to the Logbook.
+
+    Args:
+        id: uuid of the to-do.
+    """
     return writes.complete_todo(id)
 
 
-@mcp.tool()
+@mcp.tool(title="Cancel To-do", annotations=MODIFY)
 @_safe
 def cancel_todo(id: str) -> Any:
-    """Mark a to-do canceled."""
+    """Mark a to-do as canceled — done with, but not accomplished. It moves to
+    the Logbook.
+
+    Args:
+        id: uuid of the to-do.
+    """
     return writes.cancel_todo(id)
 
 
 # ---- Diagnostics ----
-@mcp.tool(name="doctor")
+@mcp.tool(name="doctor", title="Diagnose Setup", annotations=READ_ONLY)
 @_safe
 def doctor_check() -> Any:
-    """Preflight: DB found? readable (Full Disk Access)? Things URLs enabled?"""
+    """Check that this server can reach Things: is the database present, is it
+    readable (Full Disk Access), and are Things URLs enabled for writes? Run
+    this first when any other tool returns a permissions or URL error."""
     return doctor.run_checks()
 
 

@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "echo 'If your last turn changed task state, reconcile SIDECAR.md — the sidecar review queue the human watches with `sidecar SIDECAR.md`. Sections: 🧠 Needs action / 🚧 In progress / 🚘 Parked / ✅ Done / 📦 Shipped.'",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}
