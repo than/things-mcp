@@ -1,3 +1,5 @@
+import datetime
+
 import pytest
 
 from things_mcp import applescript as a
@@ -73,11 +75,15 @@ def test_list_todos_completed_reads_logbook(monkeypatch):
 
 
 def test_list_recent_filters_open_todos_by_created(monkeypatch):
-    # today is 2026-07-21; '3d' cutoff = 2026-07-18
+    # Dates are relative to today so the test does not rot: '3d' cutoff is
+    # 3 days back, so yesterday is inside the window and a year ago is not.
+    today = datetime.date.today()
+    inside = (today - datetime.timedelta(days=1)).isoformat()
+    outside = (today - datetime.timedelta(days=365)).isoformat()
     raw = (
-        _todo_row("recent", "new one", created="2026-07-20")
+        _todo_row("recent", "new one", created=inside)
         + RS
-        + _todo_row("old", "old one", created="2026-01-01")
+        + _todo_row("old", "old one", created=outside)
         + RS
     )
     monkeypatch.setattr(a, "_run", _fake_run(raw))
